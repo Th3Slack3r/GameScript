@@ -6,8 +6,8 @@
 // @match        *://www.piratequest.org/index.php*
 // @grant        none
 // @run-at       document-end
-// @updateURL    https://tsn.pw/pq/pr.js
-// @downloadURL  https://tsn.pw/pq/pr.js
+// @updateURL    https://raw.githubusercontent.com/Th3Slack3r/GameScript/refs/heads/main/PQ/pq.js
+// @downloadURL  https://raw.githubusercontent.com/Th3Slack3r/GameScript/refs/heads/main/PQ/pq.js
 // ==/UserScript==
 
 (function () {
