@@ -763,6 +763,7 @@
       <div style="text-align:center; border-bottom:1px solid #333; margin-bottom:8px; padding-bottom:4px;"><b>Tools</b></div>
       <button id="tool-sync" style="${btnStyle}">Sync Database</button>
       <button id="tool-export" style="${btnStyle}">Export Database</button>
+      <button id="tool-import" style="${btnStyle}">Import Database</button>
       <button id="tool-loot" style="${btnStyle}${lootVisible ? " color:#ffff00;" : ""}">Loot Manager${lootActive ? " [ON]" : ""}</button>
       <button id="tool-equip-calc" style="${btnStyle}">Equipment Calculator</button>
     `;
@@ -775,6 +776,9 @@
       exportDatabase();
       document.getElementById("tool-export").textContent = "Exported!";
       setTimeout(() => { if (document.getElementById("tool-export")) document.getElementById("tool-export").textContent = "Export Database"; }, 2000);
+    };
+    document.getElementById("tool-import").onclick = () => {
+      importDatabase();
     };
     document.getElementById("tool-loot").onclick = () => {
       if (lootDiv.style.display === "none") {
@@ -1698,6 +1702,78 @@
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     console.log("Database exported:", link.download);
+  }
+
+  function importDatabase() {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.json';
+    
+    fileInput.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const importData = JSON.parse(event.target.result);
+          
+          if (!importData || typeof importData !== 'object') {
+            throw new Error("Invalid JSON format");
+          }
+          
+          // Import captcha database
+          if (importData.captchaDb && typeof importData.captchaDb === 'object') {
+            handDb = importData.captchaDb;
+            localStorage.setItem(DB_KEY, JSON.stringify(handDb));
+            console.log("Imported captcha database. Samples:", getDbTotalSamples(handDb));
+          }
+          
+          // Import link database
+          if (importData.linkDb && typeof importData.linkDb === 'object') {
+            linkDb = importData.linkDb;
+            localStorage.setItem(LINK_KEY, JSON.stringify(linkDb));
+            console.log("Imported link database. Entries:", Object.keys(linkDb).length);
+          }
+          
+          // Import settings
+          if (importData.settings && typeof importData.settings === 'object') {
+            settings = Object.assign({}, DEFAULT_SETTINGS, importData.settings);
+            localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+            console.log("Imported settings");
+          }
+          
+          // Import stats if present
+          if (importData.stats && typeof importData.stats === 'object') {
+            localStorage.setItem(STATS_TRACKER_KEY, JSON.stringify(importData.stats));
+            console.log("Imported stats");
+          }
+          
+          // Import loot if present
+          if (importData.loot && typeof importData.loot === 'object') {
+            localStorage.setItem(LOOT_KEY, JSON.stringify(importData.loot));
+            console.log("Imported loot. Items:", Object.keys(importData.loot).length);
+          }
+          
+          updateHUD();
+          document.getElementById('msg').textContent = "Database imported!";
+          setTimeout(() => { if (document.getElementById('msg')) document.getElementById('msg').textContent = ""; }, 3000);
+          console.log("Database import completed successfully");
+        } catch (err) {
+          console.error("Import failed:", err);
+          document.getElementById('msg').textContent = "Import Error - Check Console";
+          setTimeout(() => { if (document.getElementById('msg')) document.getElementById('msg').textContent = ""; }, 3000);
+        }
+      };
+      reader.onerror = () => {
+        console.error("File read error");
+        document.getElementById('msg').textContent = "File Read Error";
+        setTimeout(() => { if (document.getElementById('msg')) document.getElementById('msg').textContent = ""; }, 3000);
+      };
+      reader.readAsText(file);
+    };
+    
+    fileInput.click();
   }
 
   function getCaptchaElements() {
