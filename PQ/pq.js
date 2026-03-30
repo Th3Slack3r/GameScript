@@ -582,6 +582,34 @@
       if (!byCategory[currentCat]) byCategory[currentCat] = { value: 0, items: [] };
       byCategory[currentCat].value += rowTotal;
       byCategory[currentCat].items.push({ name, qty, unitVal, rowTotal });
+
+      // Inject Auto Sell checkbox under the price, skip if already injected
+      if (!node.querySelector(".pq-autosell-wrap")) {
+        const storageKey = `PQ_AUTOSELL_NAME_${name}`;
+        const checked = localStorage.getItem(storageKey) === "true";
+
+        const wrap = document.createElement("div");
+        wrap.className = "pq-autosell-wrap";
+        wrap.style.cssText = "margin:4px 0 2px; font-size:11px; font-family:monospace;";
+
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = checked;
+        cb.style.cssText = "cursor:pointer; vertical-align:middle; margin-right:4px;";
+        cb.addEventListener("change", () => {
+          localStorage.setItem(storageKey, cb.checked ? "true" : "false");
+        });
+
+        const lbl = document.createElement("label");
+        lbl.style.cssText = "cursor:pointer; color:#ff9900; vertical-align:middle;";
+        lbl.textContent = "Auto Sell";
+        lbl.prepend(cb);
+        wrap.appendChild(lbl);
+
+        const priceEl = node.querySelector(".price");
+        if (priceEl) priceEl.after(wrap);
+        else node.appendChild(wrap);
+      }
     }
 
     // Build or replace summary div
@@ -610,7 +638,8 @@
         <b style="color:#00ccff; font-size:13px;">Inventory Value</b>
         <span style="color:#ffff00; font-size:14px; font-weight:bold;">${fmtGold(totalValue)}</span>
         <span style="color:#888; font-size:10px;">${knownCount} priced · ${unknownCount} unpriced</span>
-        <button id="pq-inv-toggle" style="background:#222; color:#aaa; border:1px solid #444; cursor:pointer; font-family:monospace; font-size:10px; padding:2px 8px; margin-left:auto;">▶ breakdown</button>
+        <button id="pq-autosell-btn" style="background:#222; color:#ff9900; border:1px solid #ff9900; cursor:pointer; font-family:monospace; font-size:10px; padding:2px 8px; margin-left:auto;">Auto Sell</button>
+        <button id="pq-inv-toggle" style="background:#222; color:#aaa; border:1px solid #444; cursor:pointer; font-family:monospace; font-size:10px; padding:2px 8px;">▶ breakdown</button>
       </div>
       <div id="pq-inv-breakdown" style="display:none; margin-top:8px;">
         <table style="border-collapse:collapse; width:100%;">
@@ -629,6 +658,30 @@
       const expanded = bd.style.display !== "none";
       bd.style.display = expanded ? "none" : "block";
       this.textContent = expanded ? "▶ breakdown" : "▼ breakdown";
+    };
+
+    document.getElementById("pq-autosell-btn").onclick = () => {
+      const queue = [];
+      swapspace.querySelectorAll(".box").forEach(box => {
+        const cb = box.querySelector(".pq-autosell-wrap input[type='checkbox']");
+        if (!cb || !cb.checked) return;
+        const sellLink = box.querySelector('a[href*="action=sell"]');
+        if (!sellLink) return;
+        let href = sellLink.getAttribute("href");
+        if (!href.startsWith("http")) href = "https://www.piratequest.org/" + href;
+        queue.push(href);
+      });
+      if (queue.length === 0) {
+        document.getElementById("msg").textContent = "No items checked for Auto Sell.";
+        return;
+      }
+      // Clear any stale state from previous runs before starting fresh
+      localStorage.removeItem("PQ_AUTOSELL_SOLD");
+      // Store individual keys to bypass SES sandbox JSON.parse bugs
+      for (let i = 0; i < queue.length; i++) localStorage.setItem("PQ_AUTOSELL_" + i, queue[i]);
+      localStorage.setItem("PQ_AUTOSELL_COUNT", queue.length.toString());
+      localStorage.setItem("PQ_AUTOSELL_ACTIVE", "true");
+      window.location.href = queue[0];
     };
   }
 
@@ -709,6 +762,7 @@
     toolsDiv.innerHTML = `
       <div style="text-align:center; border-bottom:1px solid #333; margin-bottom:8px; padding-bottom:4px;"><b>Tools</b></div>
       <button id="tool-sync" style="${btnStyle}">Sync Database</button>
+      <button id="tool-export" style="${btnStyle}">Export Database</button>
       <button id="tool-loot" style="${btnStyle}${lootVisible ? " color:#ffff00;" : ""}">Loot Manager${lootActive ? " [ON]" : ""}</button>
       <button id="tool-equip-calc" style="${btnStyle}">Equipment Calculator</button>
     `;
@@ -716,6 +770,11 @@
       syncCloud();
       document.getElementById("tool-sync").textContent = "Syncing...";
       setTimeout(() => { if (document.getElementById("tool-sync")) document.getElementById("tool-sync").textContent = "Sync Database"; }, 3000);
+    };
+    document.getElementById("tool-export").onclick = () => {
+      exportDatabase();
+      document.getElementById("tool-export").textContent = "Exported!";
+      setTimeout(() => { if (document.getElementById("tool-export")) document.getElementById("tool-export").textContent = "Export Database"; }, 2000);
     };
     document.getElementById("tool-loot").onclick = () => {
       if (lootDiv.style.display === "none") {
@@ -829,7 +888,7 @@
           <button id="pq-tb-tools" style="${btnCss}">TOOLS</button>
           <button id="pq-tb-cfg" style="${btnCss}">CFG</button>
         `;
-    
+
     topBar.appendChild(labelEl);
 
     // Inject status msg into #onlinebar
@@ -1263,7 +1322,7 @@
         }
         inlineCapEditing = false;
         injectInlineStatsPanel();
-  
+
       }
     };
   }
@@ -1611,6 +1670,34 @@
       console.error("Cloud Sync Failed:", e);
       document.getElementById('msg').textContent = "Sync Error - Check Console";
     }
+  }
+
+  function exportDatabase() {
+    const exportData = {
+      timestamp: new Date().toISOString(),
+      version: 2,
+      captchaDb: handDb,
+      linkDb: linkDb,
+      settings: settings,
+      stats: (() => {
+        try { return JSON.parse(localStorage.getItem(STATS_TRACKER_KEY) || "null"); } catch { return null; }
+      })(),
+      loot: (() => {
+        try { return JSON.parse(localStorage.getItem(LOOT_KEY) || "null"); } catch { return null; }
+      })()
+    };
+
+    const jsonStr = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = "pq_database_" + new Date().toISOString().slice(0, 10) + ".json";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    console.log("Database exported:", link.download);
   }
 
   function getCaptchaElements() {
@@ -2933,6 +3020,47 @@
 
   // Run equipment calculator on inventory page
   if (window.location.href.includes("on=inventory")) { runEquipmentCalc(); runInventoryCalc(); }
+
+  // --- AUTO SELL FLOW ---
+  (function () {
+    const active = localStorage.getItem("PQ_AUTOSELL_ACTIVE") === "true";
+    const sold = localStorage.getItem("PQ_AUTOSELL_SOLD") === "true";
+    if (!active && !sold) return;
+
+    const _aCount = parseInt(localStorage.getItem("PQ_AUTOSELL_COUNT") || "0");
+    const queue = [];
+    for (let i = 0; i < _aCount; i++) { const v = localStorage.getItem("PQ_AUTOSELL_" + i); if (v) queue.push(v); }
+
+    if (sold) {
+      localStorage.removeItem("PQ_AUTOSELL_SOLD");
+      queue.shift();
+      const nextDelay = Math.floor(Math.random() * 1500) + 1000; // 1-2.5s between items
+      if (queue.length > 0) {
+        for (let i = 0; i < queue.length; i++) localStorage.setItem("PQ_AUTOSELL_" + i, queue[i]);
+        localStorage.setItem("PQ_AUTOSELL_COUNT", queue.length.toString());
+        setTimeout(() => { window.location.href = queue[0]; }, nextDelay);
+      } else {
+        for (let i = 0; i < _aCount; i++) localStorage.removeItem("PQ_AUTOSELL_" + i);
+        localStorage.removeItem("PQ_AUTOSELL_COUNT");
+        localStorage.removeItem("PQ_AUTOSELL_ACTIVE");
+        setTimeout(() => { window.location.href = "https://www.piratequest.org/index.php?on=inventory"; }, nextDelay);
+      }
+      return;
+    }
+
+    // On a sell page — wait for page to fully load then click sell button
+    if (active && window.location.href.includes("action=sell")) {
+      const delay = Math.floor(Math.random() * 1500) + 1500; // 1.5-3s
+      setTimeout(() => {
+        const sellBtn = document.querySelector('input[type="submit"][name="sell"]');
+        if (sellBtn) {
+          window.confirm = () => true;
+          localStorage.setItem("PQ_AUTOSELL_SOLD", "true");
+          sellBtn.click();
+        }
+      }, delay);
+    }
+  })();
 
   // Inject inline stats panel on training page + hook manual train button
   if (window.location.href.includes("on=train")) {
