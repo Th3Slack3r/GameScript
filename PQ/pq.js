@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PirateQuest Universal Bot
 // @namespace    https://www.piratequest.org/
-// @version      8.6
+// @version      8.7
 // @description  HitList + Trainer with 6 modes: SNUFF, PASSIVE, ATTACK, SEWER, PSYCHO, AFK. Top bar UI.
 // @match        *://www.piratequest.org/index.php*
 // @grant        none
@@ -762,8 +762,6 @@
     toolsDiv.innerHTML = `
       <div style="text-align:center; border-bottom:1px solid #333; margin-bottom:8px; padding-bottom:4px;"><b>Tools</b></div>
       <button id="tool-sync" style="${btnStyle}">Sync Database</button>
-      <button id="tool-export" style="${btnStyle}">Export Database</button>
-      <button id="tool-import" style="${btnStyle}">Import Database</button>
       <button id="tool-loot" style="${btnStyle}${lootVisible ? " color:#ffff00;" : ""}">Loot Manager${lootActive ? " [ON]" : ""}</button>
       <button id="tool-equip-calc" style="${btnStyle}">Equipment Calculator</button>
     `;
@@ -771,14 +769,6 @@
       syncCloud();
       document.getElementById("tool-sync").textContent = "Syncing...";
       setTimeout(() => { if (document.getElementById("tool-sync")) document.getElementById("tool-sync").textContent = "Sync Database"; }, 3000);
-    };
-    document.getElementById("tool-export").onclick = () => {
-      exportDatabase();
-      document.getElementById("tool-export").textContent = "Exported!";
-      setTimeout(() => { if (document.getElementById("tool-export")) document.getElementById("tool-export").textContent = "Export Database"; }, 2000);
-    };
-    document.getElementById("tool-import").onclick = () => {
-      importDatabase();
     };
     document.getElementById("tool-loot").onclick = () => {
       if (lootDiv.style.display === "none") {
@@ -886,7 +876,7 @@
     const labelEl = document.createElement("span");
     labelEl.id = "pq-top-controls";
     labelEl.style.cssText = "position:absolute; right:5px; top:50%; transform:translateY(-50%); white-space:nowrap; z-index:1000; font-family:monospace; font-size:10px;";
-    labelEl.innerHTML = `<b style="color:#00ff00;">PQ Bot v8.6</b>
+    labelEl.innerHTML = `<b style="color:#00ff00;">PQ Bot v8.7</b>
           <button id="pq-tb-start" style="${btnCss}">START</button>
           <button id="pq-tb-list" style="${btnCss}">Hit List</button>
           <button id="pq-tb-tools" style="${btnCss}">TOOLS</button>
@@ -999,6 +989,10 @@
     html += `<div style="margin-top:6px; display:flex; gap:5px;">`;
     html += `<button id="settings-reset" style="flex:1; background:#333; color:#ff4444; border:1px solid #ff4444; cursor:pointer; font-size:10px;">RESET</button>`;
     html += `</div>`;
+    html += `<div style="margin-top:6px; display:flex; gap:5px;">`;
+    html += `<button id="settings-export" style="flex:1; background:#333; color:#00ff00; border:1px solid #444; cursor:pointer; font-size:10px;">EXPORT</button>`;
+    html += `<button id="settings-import" style="flex:1; background:#333; color:#ffff00; border:1px solid #444; cursor:pointer; font-size:10px;">IMPORT</button>`;
+    html += `</div>`;
     settingsDiv.innerHTML = html;
 
     // Mode dropdown handler
@@ -1051,6 +1045,24 @@
         }
         settings = loadSettings();
         renderSettingsPanel();
+      };
+    }
+
+    // Export button
+    const exportBtn = document.getElementById("settings-export");
+    if (exportBtn) {
+      exportBtn.onclick = () => {
+        exportDatabase();
+        exportBtn.textContent = "EXPORTED!";
+        setTimeout(() => { if (exportBtn) exportBtn.textContent = "EXPORT"; }, 2000);
+      };
+    }
+
+    // Import button
+    const importBtn = document.getElementById("settings-import");
+    if (importBtn) {
+      importBtn.onclick = () => {
+        importDatabase();
       };
     }
   }
@@ -1607,72 +1619,49 @@
   async function syncCloud(payload = null) {
     try {
       if (payload) {
-        // POST: push full DB to cloud
-        const postBody = JSON.stringify(payload);
-        const postResp = await fetch(SYNC_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: postBody
-        });
-        const postResult = await postResp.text();
-        console.log("Cloud Sync: Pushed DB to cloud. Samples:", getDbTotalSamples(payload), "Response:", postResult, "Size:", postBody.length);
+        // POST: push full DB to cloud (legacy - not used anymore)
+        console.log("Sync: Push mode not supported with GitHub sync");
       } else {
-        // GET: pull from cloud, compare with local
-        const response = await fetch(SYNC_URL, { method: 'GET' });
+        // GET: pull from GitHub raw file
+        const githubUrl = "https://raw.githubusercontent.com/Th3Slack3r/GameScript/refs/heads/main/PQ/master_db_v2.json";
+        const response = await fetch(githubUrl);
+        
+        if (!response.ok) {
+          throw new Error(`GitHub fetch failed: ${response.status} ${response.statusText}`);
+        }
+        
         const rawText = await response.text();
-        // console.log("Cloud Sync GET raw:", rawText.substring(0, 200));
         let data;
-        try { data = JSON.parse(rawText); } catch (e) { data = null; }
-        // Detect if cloud has SES-corrupted string counts that need cleaning
-        const cloudNeedsFix = rawText.includes('"counts":"[');
+        try { 
+          data = JSON.parse(rawText); 
+        } catch (e) { 
+          throw new Error("Invalid JSON from GitHub");
+        }
+        
         if (data && typeof data === 'object') {
-          // Check if cloud has valid new-format data
-          if (!isNewDbFormat(data)) {
-            // Cloud is empty or has old format - push local if we have data
-            if (getDbTotalSamples(handDb) > 0) {
-              const pushBody = JSON.stringify(handDb);
-              const pushResp = await fetch(SYNC_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: pushBody
-              });
-              const pushResult = await pushResp.text();
-              console.log("Cloud Sync: Pushed local to cloud. Response:", pushResult, "Size:", pushBody.length);
-            } else {
-              console.log("Cloud Sync: Cloud empty, local empty - nothing to do");
-            }
-          } else {
-            const cloudSamples = getDbTotalSamples(data);
-            const localSamples = getDbTotalSamples(handDb);
-            if (cloudSamples > localSamples) {
-              handDb = data;
-              localStorage.setItem(DB_KEY, JSON.stringify(handDb));
-              console.log("Cloud Sync: Pulled from cloud. Samples:", cloudSamples);
-            } else if (localSamples > cloudSamples) {
-              await fetch(SYNC_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(handDb)
-              });
-              console.log("Cloud Sync: Local larger (" + localSamples + " vs " + cloudSamples + "), pushed to cloud");
-            } else if (cloudNeedsFix) {
-              // Same sample count but cloud has corrupted string counts - push clean data
-              await fetch(SYNC_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(handDb)
-              });
-              console.log("Cloud Sync: Pushed clean data to fix corrupted cloud. Samples:", localSamples);
-            } else {
-              // console.log("Cloud Sync: In sync. Samples:", localSamples);
-            }
+          // Import the GitHub database directly
+          const cloudSamples = getDbTotalSamples(data);
+          const localSamples = getDbTotalSamples(handDb);
+          
+          if (cloudSamples > localSamples) {
+            handDb = data;
+            localStorage.setItem(DB_KEY, JSON.stringify(handDb));
+            console.log("GitHub Sync: Imported database. Samples:", cloudSamples);
+            document.getElementById('msg').textContent = `Synced ${cloudSamples} samples!`;
+          } else if (localSamples >= cloudSamples) {
+            console.log("GitHub Sync: Local database is up to date or larger. Local samples:", localSamples, "GitHub samples:", cloudSamples);
+            document.getElementById('msg').textContent = "Database up to date!";
           }
+        } else {
+          throw new Error("Invalid data format from GitHub");
         }
       }
       updateHUD();
+      setTimeout(() => { if (document.getElementById('msg')) document.getElementById('msg').textContent = ""; }, 3000);
     } catch (e) {
-      console.error("Cloud Sync Failed:", e);
+      console.error("GitHub Sync Failed:", e);
       document.getElementById('msg').textContent = "Sync Error - Check Console";
+      setTimeout(() => { if (document.getElementById('msg')) document.getElementById('msg').textContent = ""; }, 3000);
     }
   }
 
