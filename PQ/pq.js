@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PirateQuest Universal Bot
 // @namespace    https://www.piratequest.org/
-// @version      8.7
+// @version      8.8
 // @description  HitList + Trainer with 6 modes: SNUFF, PASSIVE, ATTACK, SEWER, PSYCHO, AFK. Top bar UI.
 // @author       Th3Slack3r
 // @match        *://www.piratequest.org/index.php*
