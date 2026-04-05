@@ -3,11 +3,14 @@
 // @namespace    https://www.piratequest.org/
 // @version      8.7
 // @description  HitList + Trainer with 6 modes: SNUFF, PASSIVE, ATTACK, SEWER, PSYCHO, AFK. Top bar UI.
+// @author       Th3Slack3r
 // @match        *://www.piratequest.org/index.php*
 // @grant        none
 // @run-at       document-end
 // @updateURL    https://raw.githubusercontent.com/Th3Slack3r/GameScript/refs/heads/main/PQ/pq.js
 // @downloadURL  https://raw.githubusercontent.com/Th3Slack3r/GameScript/refs/heads/main/PQ/pq.js
+// @supportURL   https://github.com/Th3Slack3r/GameScript/issues
+// @license      MIT
 // ==/UserScript==
 
 (function () {
