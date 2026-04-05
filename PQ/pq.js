@@ -879,7 +879,7 @@
     const labelEl = document.createElement("span");
     labelEl.id = "pq-top-controls";
     labelEl.style.cssText = "position:absolute; right:5px; top:50%; transform:translateY(-50%); white-space:nowrap; z-index:1000; font-family:monospace; font-size:10px;";
-    labelEl.innerHTML = `<b style="color:#00ff00;">PQ Bot v8.7</b>
+    labelEl.innerHTML = `<b style="color:#00ff00;">PQ Bot v8.8</b>
           <button id="pq-tb-start" style="${btnCss}">START</button>
           <button id="pq-tb-list" style="${btnCss}">Hit List</button>
           <button id="pq-tb-tools" style="${btnCss}">TOOLS</button>
