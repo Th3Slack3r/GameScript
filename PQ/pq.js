@@ -1722,37 +1722,41 @@
             throw new Error("Invalid JSON format");
           }
           
-          // Import captcha database
-          if (importData.captchaDb && typeof importData.captchaDb === 'object') {
-            handDb = importData.captchaDb;
+          // Check if this is an export format (has timestamp/version) or raw database format
+          if (importData.timestamp && importData.version && importData.captchaDb) {
+            // Export format - import all components
+            if (importData.captchaDb && typeof importData.captchaDb === 'object') {
+              handDb = importData.captchaDb;
+              localStorage.setItem(DB_KEY, JSON.stringify(handDb));
+              console.log("Imported captcha database. Samples:", getDbTotalSamples(handDb));
+            }
+            
+            if (importData.linkDb && typeof importData.linkDb === 'object') {
+              linkDb = importData.linkDb;
+              localStorage.setItem(LINK_KEY, JSON.stringify(linkDb));
+              console.log("Imported link database. Entries:", Object.keys(linkDb).length);
+            }
+            
+            if (importData.settings && typeof importData.settings === 'object') {
+              settings = Object.assign({}, DEFAULT_SETTINGS, importData.settings);
+              localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+              console.log("Imported settings");
+            }
+            
+            if (importData.stats && typeof importData.stats === 'object') {
+              localStorage.setItem(STATS_TRACKER_KEY, JSON.stringify(importData.stats));
+              console.log("Imported stats");
+            }
+            
+            if (importData.loot && typeof importData.loot === 'object') {
+              localStorage.setItem(LOOT_KEY, JSON.stringify(importData.loot));
+              console.log("Imported loot. Items:", Object.keys(importData.loot).length);
+            }
+          } else {
+            // Raw database format - assume this is the captchaDb directly
+            handDb = importData;
             localStorage.setItem(DB_KEY, JSON.stringify(handDb));
-            console.log("Imported captcha database. Samples:", getDbTotalSamples(handDb));
-          }
-          
-          // Import link database
-          if (importData.linkDb && typeof importData.linkDb === 'object') {
-            linkDb = importData.linkDb;
-            localStorage.setItem(LINK_KEY, JSON.stringify(linkDb));
-            console.log("Imported link database. Entries:", Object.keys(linkDb).length);
-          }
-          
-          // Import settings
-          if (importData.settings && typeof importData.settings === 'object') {
-            settings = Object.assign({}, DEFAULT_SETTINGS, importData.settings);
-            localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-            console.log("Imported settings");
-          }
-          
-          // Import stats if present
-          if (importData.stats && typeof importData.stats === 'object') {
-            localStorage.setItem(STATS_TRACKER_KEY, JSON.stringify(importData.stats));
-            console.log("Imported stats");
-          }
-          
-          // Import loot if present
-          if (importData.loot && typeof importData.loot === 'object') {
-            localStorage.setItem(LOOT_KEY, JSON.stringify(importData.loot));
-            console.log("Imported loot. Items:", Object.keys(importData.loot).length);
+            console.log("Imported raw captcha database. Samples:", getDbTotalSamples(handDb));
           }
           
           updateHUD();
