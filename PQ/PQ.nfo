@@ -1,1 +1,45 @@
 PirateQuest.org
+
+///todo
+
+Hospital
+-----------
+heal points - reduce time
+
+Training
+--------------
+update on daily reset - hangs on reset needs page refresh
+
+Edible Tool
+--------------
+edibles timer - check available - use edible. 
+Hud - select use edible. 
+Hud - dropdown edible to use. 
+
+Treasure Tool
+-----------------
+treasure timer - check if day selected - check points available - goto chest - open chest 
+Hud - Select treasure days
+
+//Event Handler
+Attack Log
+----------------
+monitor events - check if attacked - copy result link - log to hud
+hud - start/stop/reset 
+hud - show list like loot manager
+
+Shop Log
+-----------
+monitor events - check if item sold - copy result link - log to hud
+hud - start/stop/reset 
+hud - show list like loot manager
+
+Sea Mode
+---------------
+scan map - get events - attack ships - repair/restock 
+navigation - up/down/left/right - map cords
+cannon status - check current cannon status
+repair/restock - points/docking
+attack - check hp - check cannon - get local - compare to blacklist - attack local
+reports - read reports check win/lose. if lose set to blacklist - check if connon breaks.
+
