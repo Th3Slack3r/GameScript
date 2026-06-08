@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         PirateQuest Universal Bot
 // @namespace    https://www.piratequest.org/
-// @version      8.8
+// @version      8.9
 // @description  HitList + Trainer with 6 modes: SNUFF, PASSIVE, ATTACK, SEWER, PSYCHO, AFK. Top bar UI.
 // @author       Th3Slack3r
 // @match        *://www.piratequest.org/index.php*
@@ -28,6 +28,15 @@
     console.log("PQ Bot: Excluded page, not running");
     return;
   }
+
+  // invoke handler when landing on the item_chance page
+  document.addEventListener('DOMContentLoaded', () => {
+    try {
+      if (location.pathname && location.href.indexOf(ITEM_CHANCE_URL) !== -1) {
+        setTimeout(() => { handleTreasurePage().catch(console.error); }, 800);
+      }
+    } catch (e) { console.error(e); }
+  });
 
   const SYNC_URL = "https://tsn.pw/pq/pq_sync_v2.php";
   const DB_KEY = "PQ_CAPTCHA_DB_V2";
@@ -57,6 +66,8 @@
     sewer_snuffCooldown: 10,
     sewer_goldThreshold: 50000,
     sewer_fightDelayMin: 8000, sewer_fightDelayMax: 13000,
+    sewer_useEdibles: false,
+    sewer_edibleItem: "None",
     // PSYCHO
     psycho_maxLevel: 200, psycho_cooldownMin: 20,
     psycho_attackDelayMin: 5000, psycho_attackDelayMax: 8000,
@@ -112,7 +123,9 @@
       { key: "sewer_snuffCooldown", label: "Snuff Check (min)", min: 1, max: 60, step: 1 },
       { key: "sewer_goldThreshold", label: "Deposit Gold", min: 10000, max: 500000, step: 5000 },
       { key: "sewer_fightDelayMin", label: "Fight Min (ms)", min: 3000, max: 30000, step: 1000 },
-      { key: "sewer_fightDelayMax", label: "Fight Max (ms)", min: 3000, max: 30000, step: 1000 }
+      { key: "sewer_fightDelayMax", label: "Fight Max (ms)", min: 3000, max: 30000, step: 1000 },
+      { key: "sewer_useEdibles", label: "Use Edibles", type: "checkbox" },
+      { key: "sewer_edibleItem", label: "Edible Item", type: "select_edible" },
     ],
     PSYCHO: [
       { key: "psycho_maxLevel", label: "Max Level", min: 10, max: 1000, step: 10 },
@@ -160,6 +173,12 @@
   const SEWER_SNUFF_COOLDOWN_KEY = "PQ_SEWER_SNUFF_CD"; // Timestamp: next snuff check allowed
   const SEWER_NO_SNUFF_KEY = "PQ_SEWER_NO_SNUFF"; // Count: consecutive refill attempts with no snuff in inventory
   const MARKET_URL = "https://www.piratequest.org/index.php?on=item_market";
+  const INVENTORY_URL = "https://www.piratequest.org/index.php?on=inventory";
+  const SEWER_USE_EDIBLE_KEY = "PQ_SEWER_USE_EDIBLE";
+  const SEWER_EDIBLE_COOLDOWN_KEY = "PQ_SEWER_EDIBLE_COOLDOWN";
+  const ITEM_CHANCE_URL = "https://www.piratequest.org/index.php?on=item_chance";
+  const TREASURE_RUN_KEY = "PQ_TREASURE_RUN"; // flag to auto-run treasure opens
+  const TREASURE_DAYS_KEY = "PQ_TREASURE_DAYS"; // JSON map of selected days (0=Sun..6=Sat)
 
   // PSYCHO mode constants
   const PSYCHO_SEARCH_BASE = "https://www.piratequest.org/index.php?on=search&q=YTo5OntpOjA7czoxOiIzIjtzOjU6InZvdGVkIjtzOjE6IjMiO3M6ODoiZG9zZWFyY2giO3M6MToiMSI7czozOiJjaWQiO3M6MjoiMTAiO3M6MTE6ImV4Y2x1ZGVfb3duIjtzOjE6IjAiO3M6MzoiZ2lkIjtzOjE6IjAiO3M6NjoiYXR0YWNrIjtzOjE6IjEiO3M6MTQ6ImV4Y2x1ZGVfb25saW5lIjtzOjE6IjAiO3M6Njoic2VhcmNoIjtzOjE6IjEiO30=";
@@ -423,14 +442,10 @@
   // Edibles database [str%, def%, spd%] — for optional preview boost
   const EDIBLES_DB = {
     "None": [0, 0, 0],
-    "Tiki Power": [100, 100, 100], "Sour snake": [62, -20, 55], "The Secret of David Jones": [60, -20, 50],
-    "Opium": [30, 40, -20], "Tentacle toxins": [30, 30, 30], "Tiki Typhoon": [24, 23, -3],
-    "Coconut blow": [24, 23, 45], "Royal Pineapple": [23, 23, -3], "Rum": [20, 20, -10],
-    "PeeWee Brain stiffness": [20, 20, 20], "Coco Coffee": [18, 55, 65], "The tear of Poseidon": [15, 15, 15],
-    "Poseidon Pearl Powder": [10, 10, 65], "Cocoa Idol": [10, 50, 65], "Blue Whirlwind": [10, 0, 30],
-    "Gobbler": [10, 15, -5], "Captain Jack's Drinker": [5, 1, -2], "Captain's Beer": [2, -2, 0],
-    "Coffee": [0, 0, 18], "Chocolate Strawberry": [0, 0, 70], "Oriental Trench": [-6, -6, 6],
-    "Snuff": [-8, -8, 5], "Strange Gunpowder": [-10, 0, 20], "Tiki Tonic": [-10, -2, 2],
+    "Snuff": [-8, -8, 5], "Harsh Coffee": [18, 55, 65], "Davey Jones' Secret": [60, -20, 50],
+    "Oriental Snuff": [-6, -6, 6], "Bootlegged Rum": [20, 20, -10], "Laced Opium": [30, 40, -20],
+    "Rum-soaked poultice (75%)": [15, 15, 15], "Strange Snuff": [-10, 0, 20], "Poultice (50%)": [10, 50, 65],
+    "Bandages (25%)": [10, 0, 30], "Powdered Poseidon Pearl": [10, 10, 65], "Crab Legs": [100, 100, 100],
   };
 
   function runEquipmentCalc() {
@@ -766,6 +781,7 @@
       <div style="text-align:center; border-bottom:1px solid #333; margin-bottom:8px; padding-bottom:4px;"><b>Tools</b></div>
       <button id="tool-sync" style="${btnStyle}">Sync Database</button>
       <button id="tool-loot" style="${btnStyle}${lootVisible ? " color:#ffff00;" : ""}">Loot Manager${lootActive ? " [ON]" : ""}</button>
+      <button id="tool-treasure" style="${btnStyle}">Treasure Tool</button>
       <button id="tool-equip-calc" style="${btnStyle}">Equipment Calculator</button>
     `;
     document.getElementById("tool-sync").onclick = () => {
@@ -781,6 +797,15 @@
         lootDiv.style.display = "none";
       }
       renderToolsPanel(); // refresh button highlight
+    };
+    document.getElementById("tool-treasure").onclick = () => {
+      if (treasureDiv.style.display === "none") {
+        renderTreasureHud();
+        treasureDiv.style.display = "block";
+      } else {
+        treasureDiv.style.display = "none";
+      }
+      renderToolsPanel();
     };
     document.getElementById("tool-equip-calc").onclick = () => {
       window.location.href = "index.php?on=inventory";
@@ -879,7 +904,7 @@
     const labelEl = document.createElement("span");
     labelEl.id = "pq-top-controls";
     labelEl.style.cssText = "position:absolute; right:5px; top:50%; transform:translateY(-50%); white-space:nowrap; z-index:1000; font-family:monospace; font-size:10px;";
-    labelEl.innerHTML = `<b style="color:#00ff00;">PQ Bot v8.8</b>
+    labelEl.innerHTML = `<b style="color:#00ff00;">PQ Bot v8.9</b>
           <button id="pq-tb-start" style="${btnCss}">START</button>
           <button id="pq-tb-list" style="${btnCss}">Hit List</button>
           <button id="pq-tb-tools" style="${btnCss}">TOOLS</button>
@@ -976,7 +1001,15 @@
         const val = settings[item.key];
         html += `<div style="${rowStyle}">`;
         html += `<span style="${labelStyle}">${item.label}</span>`;
-        if (item.type === "select") {
+        if (item.type === "checkbox") {
+          html += `<input type="checkbox" data-key="${item.key}"${val ? " checked" : ""} style="cursor:pointer;">`;
+        } else if (item.type === "select_edible") {
+          html += `<select data-key="${item.key}" style="${selectStyle}">`;
+          for (const edible of Object.keys(EDIBLES_DB)) {
+            html += `<option value="${edible}"${val === edible ? " selected" : ""}>${edible}</option>`;
+          }
+          html += `</select>`;
+        } else if (item.type === "select") {
           html += `<select data-key="${item.key}" style="${selectStyle}">`;
           for (const opt of item.options) {
             html += `<option value="${opt}"${val === opt ? " selected" : ""}>${opt}</option>`;
@@ -1028,6 +1061,13 @@
         const key = inp.dataset.key;
         const num = parseFloat(inp.value);
         if (!isNaN(num)) saveSetting(key, num);
+      });
+    });
+
+    // Bind checkbox handlers
+    settingsDiv.querySelectorAll('input[type="checkbox"]').forEach(chk => {
+      chk.addEventListener('change', () => {
+        saveSetting(chk.dataset.key, chk.checked);
       });
     });
 
@@ -1102,6 +1142,79 @@
     overflowY: "auto",
   });
   document.body.appendChild(lootDiv);
+
+  // --- TREASURE HUB HUD ---
+  const treasureDiv = document.createElement("div");
+  Object.assign(treasureDiv.style, {
+    position: "fixed",
+    top: "20px",
+    left: "20px",
+    padding: "10px",
+    backgroundColor: "#1a1a1a",
+    color: "#ffcc66",
+    borderRadius: "10px",
+    zIndex: "99998",
+    fontSize: "11px",
+    fontFamily: "monospace",
+    border: "2px solid #555",
+    display: "none",
+    minWidth: "220px",
+    maxWidth: "320px",
+    maxHeight: "80vh",
+    overflowY: "auto",
+  });
+  document.body.appendChild(treasureDiv);
+
+  function renderTreasureHud() {
+    let savedDays = {};
+    try { savedDays = JSON.parse(localStorage.getItem(TREASURE_DAYS_KEY) || '{}'); } catch {}
+    const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const btnStyle = `background:#333; color:#ffcc66; border:1px solid #444; cursor:pointer; font-family:monospace; font-size:11px; padding:6px; margin:4px 0; width:100%; text-align:left;`;
+
+    let html = `<div style="text-align:center; border-bottom:1px solid #333; margin-bottom:6px; padding-bottom:4px;"><b>Treasure Tool</b></div>`;
+    html += `<div style="color:#ccc; font-size:11px; margin-bottom:6px;">Select days to auto-run treasure. Each open costs 5 points.</div>`;
+    html += `<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">`;
+    for (let d=0; d<7; d++) {
+      const checked = savedDays[d] ? 'checked' : '';
+      html += `<label style="color:#ccc; font-size:11px;"><input type=\"checkbox\" id=\"pq-th-day-${d}\" ${checked}> ${dayNames[d]}</label>`;
+    }
+    html += `</div>`;
+    html += `<button id=\"pq-th-run\" style=\"${btnStyle}\">Run Treasure</button>`;
+    html += `<button id=\"pq-th-force\" style=\"${btnStyle.replace('margin:4px 0;','margin:4px 0;border-color:#ffaa00;color:#ffaa00;') }\">Force Run</button>`;
+    html += `<div id=\"pq-th-msg\" style=\"margin-top:8px;color:#ccc;font-size:11px;\"></div>`;
+
+    treasureDiv.innerHTML = html;
+
+    const runBtn = document.getElementById('pq-th-run');
+    const forceBtn = document.getElementById('pq-th-force');
+    const msg = document.getElementById('pq-th-msg');
+
+    if (runBtn) runBtn.onclick = () => {
+      const sel = {};
+      for (let d=0; d<7; d++) {
+        const cb = document.getElementById(`pq-th-day-${d}`);
+        if (cb && cb.checked) sel[d] = true;
+      }
+      localStorage.setItem(TREASURE_DAYS_KEY, JSON.stringify(sel));
+      const today = getServerDay();
+      console.log('Treasure: server day detected as', today);
+      if (sel[today]) {
+        localStorage.setItem(TREASURE_RUN_KEY, 'true');
+        msg.textContent = 'Going to treasure page...';
+        setTimeout(() => { window.location.href = ITEM_CHANCE_URL; }, 800);
+      } else {
+        msg.textContent = 'Today not selected.';
+      }
+    };
+
+    if (forceBtn) forceBtn.onclick = () => {
+      // Force run regardless of day
+      localStorage.setItem(TREASURE_DAYS_KEY, JSON.stringify({}));
+      localStorage.setItem(TREASURE_RUN_KEY, 'true');
+      msg.textContent = 'Force run: going to treasure page...';
+      setTimeout(() => { window.location.href = ITEM_CHANCE_URL; }, 800);
+    };
+  }
 
   function renderLootHud() {
     const isActive = localStorage.getItem(LOOT_ACTIVE_KEY) === "true";
@@ -1305,7 +1418,60 @@
       html += `<div style="color:#555;font-size:10px;margin-top:4px;">${isActive ? "Waiting for data..." : "Click START to begin tracking."}</div>`;
     }
 
+    // --- Treasure Tool HUD ---
+    const savedDays = JSON.parse(localStorage.getItem(TREASURE_DAYS_KEY) || '{}');
+    const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    let treasureHtml = `<div style="margin-top:8px;padding-top:8px;border-top:1px solid #222;">`;
+    treasureHtml += `<b style="color:#ffcc66;font-size:11px;">TREASURE TOOL</b><div style="font-size:11px;color:#aaa;margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">Days:`;
+    for (let d=0; d<7; d++) {
+      const checked = savedDays[d] ? 'checked' : '';
+      treasureHtml += `<label style="font-size:11px;color:#ccc;margin-left:6px;"><input type="checkbox" id="pq-treasure-day-${d}" ${checked}> ${dayNames[d]}</label>`;
+    }
+    treasureHtml += `</div>`;
+    treasureHtml += `<div style="margin-top:6px;display:flex;gap:6px;align-items:center;">`;
+    treasureHtml += `<button id="pq-treasure-run" style="${btnStyle('#00ff00')}">Run Treasure</button>`;
+    treasureHtml += `<button id="pq-treasure-force" style="${btnStyle('#ffaa00')}">Force Run</button>`;
+    treasureHtml += `<div id="pq-treasure-msg" style="margin-left:8px;color:#ccc;font-size:11px;"></div>`;
+    treasureHtml += `</div></div>`;
+
+    html += treasureHtml;
+
     panel.innerHTML = html;
+
+    // Treasure control handlers
+    const treRunBtn = document.getElementById('pq-treasure-run');
+    const treForceBtn = document.getElementById('pq-treasure-force');
+    const treMsg = document.getElementById('pq-treasure-msg');
+    if (treRunBtn) {
+      treRunBtn.onclick = () => {
+        // save selected days
+        const sel = {};
+        for (let d=0; d<7; d++) {
+          const cb = document.getElementById(`pq-treasure-day-${d}`);
+          if (cb && cb.checked) sel[d] = true;
+        }
+        localStorage.setItem(TREASURE_DAYS_KEY, JSON.stringify(sel));
+        // check today
+        const today = getServerDay();
+        console.log('Treasure: server day detected as', today);
+        if (sel[today]) {
+          localStorage.setItem(TREASURE_RUN_KEY, 'true');
+          treMsg.textContent = 'Going to treasure page...';
+          setTimeout(() => { window.location.href = ITEM_CHANCE_URL; }, 800);
+        } else {
+          treMsg.textContent = 'Today not selected.';
+        }
+      };
+    }
+    if (treForceBtn) {
+      treForceBtn.onclick = () => {
+        // allow running regardless of day
+        localStorage.setItem(TREASURE_DAYS_KEY, JSON.stringify({}));
+        localStorage.setItem(TREASURE_RUN_KEY, 'true');
+        treMsg.textContent = 'Force run: going to treasure page...';
+        setTimeout(() => { window.location.href = ITEM_CHANCE_URL; }, 800);
+      };
+    }
 
     document.getElementById("pq-inline-toggle").onclick = () => {
       const active = localStorage.getItem(STATS_ACTIVE_KEY) === "true";
@@ -1347,6 +1513,111 @@
   }
 
   const sleep = (min, max) => new Promise(r => setTimeout(r, Math.random() * (max - min) + min));
+
+  // --- TREASURE PAGE HANDLER ---
+  async function handleTreasurePage() {
+    if (localStorage.getItem(TREASURE_RUN_KEY) !== 'true') return;
+    // throttle quick repeats
+    const last = parseInt(localStorage.getItem('PQ_TREASURE_LAST') || '0');
+    if (Date.now() - last < 3000) return;
+    localStorage.setItem('PQ_TREASURE_LAST', Date.now().toString());
+
+    console.log('Treasure: starting auto-open flow');
+    const msgEl = document.getElementById('msg');
+    if (msgEl) msgEl.textContent = 'Treasure: checking points...';
+
+    // Find points element using multiple fallbacks
+    const ptsEl = document.getElementById('pointsupd') || document.getElementById('points') || document.querySelector('.points') || document.querySelector('[id*="points"]');
+    if (!ptsEl) {
+      console.log('Treasure: points element not found');
+      const thmsg = document.getElementById('pq-th-msg'); if (thmsg) thmsg.textContent = 'Points element not found';
+      localStorage.removeItem(TREASURE_RUN_KEY);
+      return;
+    }
+
+    let points = parseInt((ptsEl.textContent || ptsEl.value || '0').replace(/[^0-9]/g, '')) || 0;
+    console.log('Treasure: points available', points);
+
+    // Track which chest indices we've opened during this run to avoid repeats
+    const openedIndices = new Set();
+    while (points >= 5 && openedIndices.size < 3) {
+      let opened = false;
+
+      // Candidate elements: include inputs[type=image], input[type=button], buttons, anchors
+      const allEls = Array.from(document.querySelectorAll('input, button, a'));
+      const candidates = allEls.filter(el => {
+        // must be visible
+        try {
+          const cs = window.getComputedStyle(el);
+          if (!cs || cs.display === 'none' || cs.visibility === 'hidden' || el.disabled) return false;
+        } catch (e) {}
+        const id = (el.id || '').toLowerCase();
+        const on = (el.getAttribute('onclick') || '').toLowerCase();
+        const txt = ((el.textContent || el.value) || '').toLowerCase();
+        return /chest|open_chest|open chest|openchest|open\s+treasure|open treasure|open_button|open_chest-en/.test(id + ' ' + on + ' ' + txt);
+      });
+
+      // If no candidates, also scan onclicks for OpenChest calls
+      if (candidates.length === 0) {
+        const more = Array.from(document.querySelectorAll('[onclick]')).filter(el => /openchest|open_chest|openChest|OpenChest/i.test(el.getAttribute('onclick')));
+        for (const m of more) if (!candidates.includes(m)) candidates.push(m);
+      }
+
+      for (const btn of candidates) {
+        // determine chest index for this candidate
+        let idx = null;
+        const idAttr = (btn.id || '');
+        const idMatch = idAttr.match(/chest[_-]button[_-]?(\d+)/i) || idAttr.match(/chest(\d+)/i);
+        if (idMatch) idx = parseInt(idMatch[1]);
+        if (!idx) {
+          const on = btn.getAttribute('onclick') || '';
+          const m = on.match(/OpenChest\(['\"]?(\d+)['\"]?\)/i);
+          if (m) idx = parseInt(m[1]);
+        }
+        if (idx && openedIndices.has(idx)) continue; // skip already opened
+
+        try {
+          console.log('Treasure: attempting candidate', btn.id || btn.getAttribute('onclick') || (btn.textContent || btn.value || '').trim(), 'idx=', idx);
+          if (msgEl) msgEl.textContent = `Opening chest ${idx || ''}...`;
+          const thmsg = document.getElementById('pq-th-msg'); if (thmsg) thmsg.textContent = `Opening chest ${idx || ''}...`;
+
+          if (typeof OpenChest === 'function' && idx) {
+            OpenChest(String(idx));
+          } else {
+            // ensure clickable element is not hidden; scroll into view and click
+            try { btn.scrollIntoView({block:'center'}); } catch (e) {}
+            btn.click();
+          }
+        } catch (e) { try { btn.click(); } catch (e2) { console.error('Treasure click failed', e2); } }
+
+        // wait for server response and UI update
+        await sleep(2500, 4000);
+
+        // after click, mark opened index if available, otherwise try to infer which chest changed
+        if (idx) openedIndices.add(idx);
+        else {
+          // try detect which chest image changed to 'open' by comparing srcs
+          for (let j = 1; j <= 3; j++) {
+            const img = document.getElementById(`chest${j}`) || document.getElementById(`found_item_${j}`);
+            if (!img) continue;
+            const src = (img.getAttribute('src') || '').toLowerCase();
+            if (src.indexOf('open') !== -1 || src.indexOf('opened') !== -1) openedIndices.add(j);
+          }
+        }
+
+        // refresh points from DOM
+        const refreshedPtsEl = document.getElementById('pointsupd') || document.getElementById('points') || document.querySelector('.points') || document.querySelector('[id*="points"]');
+        points = parseInt((refreshedPtsEl?.textContent || refreshedPtsEl?.value || '0').replace(/[^0-9]/g, '')) || 0;
+        opened = true;
+        break;
+      }
+      if (!opened) break;
+    }
+
+    localStorage.removeItem(TREASURE_RUN_KEY);
+    if (msgEl) msgEl.textContent = 'Treasure run complete.';
+    console.log('Treasure: run complete');
+  }
 
   // --- HITLIST FUNCTIONS ---
   function renderLinks() {
@@ -2399,7 +2670,32 @@
       return;
     }
 
+    // If a captcha is present, pause until cleared
     if (getCaptchaElements()) return;
+
+    // Snuff mode sanity check: sometimes after a captcha or server reset
+    // the training page can become stale (missing selects/buttons). Detect
+    // that and refresh the page so the bot can re-sync.
+    if (trainingMode === "SNUFF") {
+      const itemBox = document.getElementById("itemID");
+      const trainBtn = document.getElementById('train_btn') || document.querySelector('input[value="Train"], button[id="train_btn"], button[title*="Train"]');
+      if (!itemBox || !trainBtn) {
+        const lastRefresh = parseInt(localStorage.getItem('PQ_SNREFRESH_TS') || '0');
+        const now = Date.now();
+        // Only auto-reload at most once per 60s to avoid reload loops
+        if (now - lastRefresh > 60000) {
+          console.log('Snuff mode: page looks stale, reloading to resync');
+          localStorage.setItem('PQ_SNREFRESH_TS', now.toString());
+          document.getElementById('msg').textContent = 'Snuff stale — reloading...';
+          setTimeout(() => { location.reload(); }, 1200);
+          return;
+        } else {
+          console.log('Snuff mode: stale but recently refreshed; waiting...');
+          setTimeout(trainerLoop, 3000);
+          return;
+        }
+      }
+    }
 
     // Check hitlist for ready targets before training (ATTACK mode only)
     // Only attack when 4 targets are ready (each attack = 25% energy, snuff = 100%)
@@ -2531,6 +2827,133 @@
     return parseInt(text) || 0;
   }
 
+  // Parse server "Game Time" shown in the top bar and return the server's weekday (0=Sun..6=Sat)
+  function getServerDay() {
+    try {
+      const top = document.getElementById('toptopmeniu');
+      const hay = top ? top.textContent : document.body.textContent || '';
+      const m = hay.match(/Game Time:\s*([0-2]?\d:[0-5]\d)/i);
+      if (m) {
+        const parts = m[1].split(':');
+        const now = new Date();
+        now.setHours(parseInt(parts[0], 10));
+        now.setMinutes(parseInt(parts[1], 10));
+        now.setSeconds(0);
+        now.setMilliseconds(0);
+        return now.getDay();
+      }
+    } catch (e) { console.error('getServerDay error', e); }
+    return new Date().getDay();
+  }
+
+  // --- EDIBLE FUNCTIONS FOR SEWER ---
+  function checkEdibleActive(edibleName) {
+    if (edibleName === "None") return true; // None is always "active"
+    
+    // Look for any active edible timer in the status area
+    const statusArea = document.querySelector('.user_avatar_status') || 
+                      document.querySelector('[class*="status"]') ||
+                      document.body;
+    
+    if (statusArea) {
+      const timerElements = statusArea.querySelectorAll('[id^="timeUpdateOutter_"]');
+      console.log("Looking for edible timer, found", timerElements.length, "timer elements");
+      for (const timerEl of timerElements) {
+        const timerText = timerEl.textContent || '';
+        console.log("Checking timer text:", timerText);
+        
+        // Try multiple matching strategies
+        let isMatch = false;
+        
+        // 1. Direct substring match (most common)
+        if (timerText.includes(edibleName)) {
+          console.log("FOUND ACTIVE EDIBLE (substring):", edibleName);
+          isMatch = true;
+        }
+        // 2. Case-insensitive match
+        else if (timerText.toLowerCase().includes(edibleName.toLowerCase())) {
+          console.log("FOUND ACTIVE EDIBLE (case-insensitive):", edibleName);
+          isMatch = true;
+        }
+        // 3. Partial word match for robustness
+        else {
+          const pageWords = timerText.toLowerCase().split(/[\s'\-():]+/).filter(w => w.length > 2);
+          const searchWords = edibleName.toLowerCase().split(/[\s'\-():]+/).filter(w => w.length > 2);
+          
+          if (pageWords.length > 0 && searchWords.length > 0) {
+            const matchCount = pageWords.filter(w => searchWords.includes(w)).length;
+            if (matchCount >= Math.min(pageWords.length, searchWords.length) * 0.7) {
+              console.log("FOUND ACTIVE EDIBLE (word match):", edibleName);
+              isMatch = true;
+            }
+          }
+        }
+        
+        if (isMatch) {
+          return true;
+        }
+      }
+      console.log("Edible timer NOT found - edible is not active:", edibleName);
+    }
+    
+    return false;
+  }
+
+  async function useEdibleItem(itemId) {
+    // Navigate to inventory page
+    const invUrl = "https://www.piratequest.org/index.php?on=inventory";
+    window.location.href = invUrl;
+    await sleep(3000, 4000);
+    
+    // Parse page to find the use button
+    let foundUse = false;
+    const useLinks = document.querySelectorAll('a.use');
+    for (const link of useLinks) {
+      const href = link.getAttribute('onclick') || '';
+      if (href.includes("submit_item('" + itemId + "'")) {
+        link.click();
+        foundUse = true;
+        console.log("Clicked use button for item:", itemId);
+        break;
+      }
+    }
+    
+    if (foundUse) {
+      await sleep(2000, 3000);
+      // Return to sewer
+      window.location.href = SEWER_URL;
+    } else {
+      console.log("Could not find use button for item:", itemId);
+    }
+  }
+
+  function findItemIdInInventory(itemName) {
+    // Parse inventory page to find item ID for given item name
+    const invItems = document.querySelectorAll('#inventory td.dcol1 a.item_view');
+    let foundItemId = null;
+    let foundCount = 0;
+    
+    for (const itemLink of invItems) {
+      if (itemLink.textContent.trim() === itemName) {
+        // Found the item - now get its ID from the use button
+        const row = itemLink.closest('tr');
+        if (row) {
+          const useLink = row.querySelector('a.use');
+          if (useLink) {
+            const onclick = useLink.getAttribute('onclick') || '';
+            const match = onclick.match(/submit_item\('(\d+)'/);
+            if (match) {
+              foundItemId = match[1];
+              foundCount++;
+            }
+          }
+        }
+      }
+    }
+    
+    return foundItemId; // Return first found item ID
+  }
+
   // --- SEWER LOOP ---
   async function sewerLoop() {
     if (!trainingActive) return;
@@ -2545,6 +2968,7 @@
     const onTrainPage = currentUrl.includes("on=train");
     const onBankPage = currentUrl.includes("on=myprofile");
     const onMarketPage = currentUrl.includes("on=item_market");
+    const onInventoryPage = currentUrl.includes("on=inventory");
 
     // Handle snuff buying flow - we're on item_market to buy snuff
     if (onMarketPage && localStorage.getItem(SEWER_BUY_SNUFF_KEY) === "true") {
@@ -2663,6 +3087,138 @@
       return;
     }
 
+    // Handle edible use flow - we're on inventory to use an edible
+    if (onInventoryPage && localStorage.getItem(SEWER_USE_EDIBLE_KEY) === "true") {
+      console.log("On inventory page for sewer edible use");
+      const edibleName = localStorage.getItem("PQ_SEWER_EDIBLE_NAME");
+      console.log("Edible name from storage:", edibleName);
+      document.getElementById('msg').textContent = "Using Edible...";
+
+      if (edibleName) {
+        await sleep(1000, 2000);
+        
+        // Find the edible in the box structure under <h2>Edibles</h2>
+        let foundItemId = null;
+        
+        // Find all h2 headers and look for "Edibles"
+        const headers = document.querySelectorAll('h2');
+        console.log("Found", headers.length, "h2 headers");
+        let ediblesSection = null;
+        for (const h2 of headers) {
+          console.log("Checking h2:", h2.textContent.trim());
+          if (h2.textContent.trim() === "Edibles") {
+            ediblesSection = h2;
+            console.log("Found Edibles section!");
+            break;
+          }
+        }
+        
+        if (ediblesSection) {
+          console.log("Edibles section found, looking for items...");
+          // Get all boxes after the Edibles header
+          let currentEl = ediblesSection.nextElementSibling;
+          let boxCount = 0;
+          while (currentEl) {
+            if (currentEl.tagName === 'H2') {
+              console.log("Hit next h2, stopping search");
+              break; // Stop at next section
+            }
+            
+            if (currentEl.classList.contains('box')) {
+              boxCount++;
+              // Check if this box contains our edible
+              const itemLink = currentEl.querySelector('a.item_view');
+              if (itemLink) {
+                const itemNameOnPage = itemLink.textContent.trim();
+                console.log("Box " + boxCount + ": found item:", itemNameOnPage);
+                
+                // Try multiple matching strategies
+                let isMatch = false;
+                
+                // 1. Exact match
+                if (itemNameOnPage === edibleName) {
+                  console.log("EXACT MATCH with", edibleName);
+                  isMatch = true;
+                }
+                // 2. Case-insensitive match
+                else if (itemNameOnPage.toLowerCase() === edibleName.toLowerCase()) {
+                  console.log("CASE-INSENSITIVE MATCH with", edibleName);
+                  isMatch = true;
+                }
+                // 3. Partial match (check if names contain key words)
+                else {
+                  // Extract key words from both names (split and filter small words)
+                  const pageWords = itemNameOnPage.toLowerCase().split(/[\s'\-()]+/).filter(w => w.length > 2);
+                  const searchWords = edibleName.toLowerCase().split(/[\s'\-()]+/).filter(w => w.length > 2);
+                  
+                  console.log("Comparing words - page:", pageWords, "search:", searchWords);
+                  
+                  // If most words match, consider it a match
+                  if (pageWords.length > 0 && searchWords.length > 0) {
+                    const matchCount = pageWords.filter(w => searchWords.includes(w)).length;
+                    const threshold = Math.min(pageWords.length, searchWords.length) * 0.7;
+                    console.log("Match count:", matchCount, "threshold:", threshold);
+                    if (matchCount >= threshold) {
+                      console.log("WORD MATCH with", edibleName);
+                      isMatch = true;
+                    }
+                  }
+                }
+                
+                if (isMatch) {
+                  console.log("Match found! Getting use button...");
+                  // Found it! Get the use button
+                  const useLink = currentEl.querySelector('a.use');
+                  if (useLink) {
+                    console.log("Found use button");
+                    const onclick = useLink.getAttribute('onclick') || '';
+                    console.log("Onclick attribute:", onclick);
+                    const match = onclick.match(/submit_item\('(\d+)'/);
+                    if (match) {
+                      foundItemId = match[1];
+                      console.log("Extracted item ID:", foundItemId);
+                      console.log("CLICKING USE BUTTON NOW");
+                      useLink.click();
+                      console.log("Clicked use button for", itemNameOnPage, "item id:", foundItemId);
+                    } else {
+                      console.log("Could not extract item ID from onclick:", onclick);
+                    }
+                  } else {
+                    console.log("Use button not found in box");
+                  }
+                  break;
+                }
+              } else {
+                console.log("Box " + boxCount + ": no item link found");
+              }
+            }
+            currentEl = currentEl.nextElementSibling;
+          }
+          console.log("Total boxes checked:", boxCount);
+        } else {
+          console.log("Edibles section NOT found!");
+        }
+        
+        if (!foundItemId) {
+          console.log("Could not find edible item in inventory:", edibleName);
+        }
+        
+        await sleep(2000, 3000);
+      } else {
+        console.log("ERROR: edibleName is empty or null!");
+      }
+
+      // Clear flags and return to sewer
+      localStorage.removeItem(SEWER_USE_EDIBLE_KEY);
+      localStorage.removeItem("PQ_SEWER_EDIBLE_NAME");
+      // Set a cooldown so we don't spam edible use (give it 6 seconds to activate)
+      localStorage.setItem(SEWER_EDIBLE_COOLDOWN_KEY, (Date.now() + 6000).toString());
+      document.getElementById('msg').textContent = "Edible Used - Back to Sewer...";
+      await sleep(2000, 4000);
+      window.location.href = SEWER_URL;
+      return;
+    }
+
     // Check if we came from sewer to refill energy
     if (onTrainPage && localStorage.getItem(SEWER_REFILL_KEY) === "true") {
       console.log("On train page for sewer energy refill");
@@ -2731,6 +3287,34 @@
     }
 
     if (checkCaptchaWait("Sewer Captcha - Waiting for you...")) return;
+
+    // Check if edible cooldown is still active (wait after using an edible)
+    const edibleCooldownExpires = parseInt(localStorage.getItem(SEWER_EDIBLE_COOLDOWN_KEY) || "0");
+    const edibleCooldownActive = Date.now() < edibleCooldownExpires;
+    
+    if (edibleCooldownActive) {
+      console.log("Edible cooldown active, waiting for effect to register...");
+      setTimeout(sewerLoop, 8000); // Wait longer to ensure timer is visible on page
+      return;
+    }
+
+    // Check if edibles are enabled and not active
+    if (settings.sewer_useEdibles && settings.sewer_edibleItem && settings.sewer_edibleItem !== "None") {
+      if (!checkEdibleActive(settings.sewer_edibleItem)) {
+        console.log("Edible not active, going to use:", settings.sewer_edibleItem);
+        document.getElementById('msg').textContent = `Using Edible: ${settings.sewer_edibleItem}...`;
+        
+        // Navigate to inventory to use the edible
+        const invUrl = INVENTORY_URL;
+        localStorage.setItem(SEWER_USE_EDIBLE_KEY, "true");
+        // Store the item name temporarily so we can find it on inventory page
+        localStorage.setItem("PQ_SEWER_EDIBLE_NAME", settings.sewer_edibleItem);
+        
+        await sleep(2000, 4000);
+        window.location.href = invUrl;
+        return;
+      }
+    }
 
     // Check HP - if below 40%, wait for regen
     const hp = getHpPercent();
@@ -3092,6 +3676,11 @@
 
   // Run equipment calculator on inventory page
   if (window.location.href.includes("on=inventory")) { runEquipmentCalc(); runInventoryCalc(); }
+
+  // If we are on the treasure page, attempt to run handler immediately
+  if (window.location.href.includes("on=item_chance")) {
+    setTimeout(() => { handleTreasurePage().catch(console.error); }, 500);
+  }
 
   // --- AUTO SELL FLOW ---
   (function () {
