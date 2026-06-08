@@ -1899,24 +1899,24 @@
         // GET: pull from GitHub raw file
         const githubUrl = "https://raw.githubusercontent.com/Th3Slack3r/GameScript/refs/heads/main/PQ/master_db_v2.json";
         const response = await fetch(githubUrl);
-        
+
         if (!response.ok) {
           throw new Error(`GitHub fetch failed: ${response.status} ${response.statusText}`);
         }
-        
+
         const rawText = await response.text();
         let data;
-        try { 
-          data = JSON.parse(rawText); 
-        } catch (e) { 
+        try {
+          data = JSON.parse(rawText);
+        } catch (e) {
           throw new Error("Invalid JSON from GitHub");
         }
-        
+
         if (data && typeof data === 'object') {
           // Import the GitHub database directly
           const cloudSamples = getDbTotalSamples(data);
           const localSamples = getDbTotalSamples(handDb);
-          
+
           if (cloudSamples > localSamples) {
             handDb = data;
             localStorage.setItem(DB_KEY, JSON.stringify(handDb));
@@ -1971,20 +1971,20 @@
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = '.json';
-    
+
     fileInput.onchange = (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      
+
       const reader = new FileReader();
       reader.onload = (event) => {
         try {
           const importData = JSON.parse(event.target.result);
-          
+
           if (!importData || typeof importData !== 'object') {
             throw new Error("Invalid JSON format");
           }
-          
+
           // Check if this is an export format (has timestamp/version) or raw database format
           if (importData.timestamp && importData.version && importData.captchaDb) {
             // Export format - import all components
@@ -1993,24 +1993,24 @@
               localStorage.setItem(DB_KEY, JSON.stringify(handDb));
               console.log("Imported captcha database. Samples:", getDbTotalSamples(handDb));
             }
-            
+
             if (importData.linkDb && typeof importData.linkDb === 'object') {
               linkDb = importData.linkDb;
               localStorage.setItem(LINK_KEY, JSON.stringify(linkDb));
               console.log("Imported link database. Entries:", Object.keys(linkDb).length);
             }
-            
+
             if (importData.settings && typeof importData.settings === 'object') {
               settings = Object.assign({}, DEFAULT_SETTINGS, importData.settings);
               localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
               console.log("Imported settings");
             }
-            
+
             if (importData.stats && typeof importData.stats === 'object') {
               localStorage.setItem(STATS_TRACKER_KEY, JSON.stringify(importData.stats));
               console.log("Imported stats");
             }
-            
+
             if (importData.loot && typeof importData.loot === 'object') {
               localStorage.setItem(LOOT_KEY, JSON.stringify(importData.loot));
               console.log("Imported loot. Items:", Object.keys(importData.loot).length);
@@ -2021,7 +2021,7 @@
             localStorage.setItem(DB_KEY, JSON.stringify(handDb));
             console.log("Imported raw captcha database. Samples:", getDbTotalSamples(handDb));
           }
-          
+
           updateHUD();
           document.getElementById('msg').textContent = "Database imported!";
           setTimeout(() => { if (document.getElementById('msg')) document.getElementById('msg').textContent = ""; }, 3000);
@@ -2039,7 +2039,7 @@
       };
       reader.readAsText(file);
     };
-    
+
     fileInput.click();
   }
 
@@ -2849,22 +2849,22 @@
   // --- EDIBLE FUNCTIONS FOR SEWER ---
   function checkEdibleActive(edibleName) {
     if (edibleName === "None") return true; // None is always "active"
-    
+
     // Look for any active edible timer in the status area
-    const statusArea = document.querySelector('.user_avatar_status') || 
+    const statusArea = document.querySelector('.user_avatar_status') ||
                       document.querySelector('[class*="status"]') ||
                       document.body;
-    
+
     if (statusArea) {
       const timerElements = statusArea.querySelectorAll('[id^="timeUpdateOutter_"]');
       console.log("Looking for edible timer, found", timerElements.length, "timer elements");
       for (const timerEl of timerElements) {
         const timerText = timerEl.textContent || '';
         console.log("Checking timer text:", timerText);
-        
+
         // Try multiple matching strategies
         let isMatch = false;
-        
+
         // 1. Direct substring match (most common)
         if (timerText.includes(edibleName)) {
           console.log("FOUND ACTIVE EDIBLE (substring):", edibleName);
@@ -2879,7 +2879,7 @@
         else {
           const pageWords = timerText.toLowerCase().split(/[\s'\-():]+/).filter(w => w.length > 2);
           const searchWords = edibleName.toLowerCase().split(/[\s'\-():]+/).filter(w => w.length > 2);
-          
+
           if (pageWords.length > 0 && searchWords.length > 0) {
             const matchCount = pageWords.filter(w => searchWords.includes(w)).length;
             if (matchCount >= Math.min(pageWords.length, searchWords.length) * 0.7) {
@@ -2888,14 +2888,14 @@
             }
           }
         }
-        
+
         if (isMatch) {
           return true;
         }
       }
       console.log("Edible timer NOT found - edible is not active:", edibleName);
     }
-    
+
     return false;
   }
 
@@ -2904,7 +2904,7 @@
     const invUrl = "https://www.piratequest.org/index.php?on=inventory";
     window.location.href = invUrl;
     await sleep(3000, 4000);
-    
+
     // Parse page to find the use button
     let foundUse = false;
     const useLinks = document.querySelectorAll('a.use');
@@ -2917,7 +2917,7 @@
         break;
       }
     }
-    
+
     if (foundUse) {
       await sleep(2000, 3000);
       // Return to sewer
@@ -2932,7 +2932,7 @@
     const invItems = document.querySelectorAll('#inventory td.dcol1 a.item_view');
     let foundItemId = null;
     let foundCount = 0;
-    
+
     for (const itemLink of invItems) {
       if (itemLink.textContent.trim() === itemName) {
         // Found the item - now get its ID from the use button
@@ -2950,7 +2950,7 @@
         }
       }
     }
-    
+
     return foundItemId; // Return first found item ID
   }
 
@@ -3096,10 +3096,24 @@
 
       if (edibleName) {
         await sleep(1000, 2000);
-        
+
+        // If we've recently clicked the edible, avoid clicking again and return to sewer
+        const lastClicked = parseInt(localStorage.getItem('PQ_SEWER_EDIBLE_CLICKED') || '0');
+        if (lastClicked && (Date.now() - lastClicked) < 30000) {
+          console.log('Edible was recently clicked; skipping re-click and returning to sewer');
+          // ensure cooldown exists to allow effect to register
+          localStorage.setItem(SEWER_EDIBLE_COOLDOWN_KEY, (Date.now() + 8000).toString());
+          localStorage.removeItem(SEWER_USE_EDIBLE_KEY);
+          localStorage.removeItem('PQ_SEWER_EDIBLE_NAME');
+          document.getElementById('msg').textContent = 'Edible used - Returning to Sewer...';
+          await sleep(1000, 2000);
+          window.location.href = SEWER_URL;
+          return;
+        }
+
         // Find the edible in the box structure under <h2>Edibles</h2>
         let foundItemId = null;
-        
+
         // Find all h2 headers and look for "Edibles"
         const headers = document.querySelectorAll('h2');
         console.log("Found", headers.length, "h2 headers");
@@ -3112,7 +3126,7 @@
             break;
           }
         }
-        
+
         if (ediblesSection) {
           console.log("Edibles section found, looking for items...");
           // Get all boxes after the Edibles header
@@ -3123,7 +3137,7 @@
               console.log("Hit next h2, stopping search");
               break; // Stop at next section
             }
-            
+
             if (currentEl.classList.contains('box')) {
               boxCount++;
               // Check if this box contains our edible
@@ -3131,10 +3145,10 @@
               if (itemLink) {
                 const itemNameOnPage = itemLink.textContent.trim();
                 console.log("Box " + boxCount + ": found item:", itemNameOnPage);
-                
+
                 // Try multiple matching strategies
                 let isMatch = false;
-                
+
                 // 1. Exact match
                 if (itemNameOnPage === edibleName) {
                   console.log("EXACT MATCH with", edibleName);
@@ -3150,9 +3164,9 @@
                   // Extract key words from both names (split and filter small words)
                   const pageWords = itemNameOnPage.toLowerCase().split(/[\s'\-()]+/).filter(w => w.length > 2);
                   const searchWords = edibleName.toLowerCase().split(/[\s'\-()]+/).filter(w => w.length > 2);
-                  
+
                   console.log("Comparing words - page:", pageWords, "search:", searchWords);
-                  
+
                   // If most words match, consider it a match
                   if (pageWords.length > 0 && searchWords.length > 0) {
                     const matchCount = pageWords.filter(w => searchWords.includes(w)).length;
@@ -3164,7 +3178,7 @@
                     }
                   }
                 }
-                
+
                 if (isMatch) {
                   console.log("Match found! Getting use button...");
                   // Found it! Get the use button
@@ -3178,6 +3192,8 @@
                       foundItemId = match[1];
                       console.log("Extracted item ID:", foundItemId);
                       console.log("CLICKING USE BUTTON NOW");
+                      // mark that we've clicked to avoid repeats
+                      try { localStorage.setItem('PQ_SEWER_EDIBLE_CLICKED', Date.now().toString()); } catch (e) {}
                       useLink.click();
                       console.log("Clicked use button for", itemNameOnPage, "item id:", foundItemId);
                     } else {
@@ -3198,11 +3214,11 @@
         } else {
           console.log("Edibles section NOT found!");
         }
-        
+
         if (!foundItemId) {
           console.log("Could not find edible item in inventory:", edibleName);
         }
-        
+
         await sleep(2000, 3000);
       } else {
         console.log("ERROR: edibleName is empty or null!");
@@ -3291,7 +3307,7 @@
     // Check if edible cooldown is still active (wait after using an edible)
     const edibleCooldownExpires = parseInt(localStorage.getItem(SEWER_EDIBLE_COOLDOWN_KEY) || "0");
     const edibleCooldownActive = Date.now() < edibleCooldownExpires;
-    
+
     if (edibleCooldownActive) {
       console.log("Edible cooldown active, waiting for effect to register...");
       setTimeout(sewerLoop, 8000); // Wait longer to ensure timer is visible on page
@@ -3303,13 +3319,13 @@
       if (!checkEdibleActive(settings.sewer_edibleItem)) {
         console.log("Edible not active, going to use:", settings.sewer_edibleItem);
         document.getElementById('msg').textContent = `Using Edible: ${settings.sewer_edibleItem}...`;
-        
+
         // Navigate to inventory to use the edible
         const invUrl = INVENTORY_URL;
         localStorage.setItem(SEWER_USE_EDIBLE_KEY, "true");
         // Store the item name temporarily so we can find it on inventory page
         localStorage.setItem("PQ_SEWER_EDIBLE_NAME", settings.sewer_edibleItem);
-        
+
         await sleep(2000, 4000);
         window.location.href = invUrl;
         return;
