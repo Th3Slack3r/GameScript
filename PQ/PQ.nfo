@@ -6,21 +6,6 @@ Hospital
 -----------
 heal points - reduce time
 
-Training
---------------
-update on daily reset - hangs on reset needs page refresh
-
-Edible Tool
---------------
-edibles timer - check available - use edible. 
-Hud - select use edible. 
-Hud - dropdown edible to use. 
-
-Treasure Tool
------------------
-treasure timer - check if day selected - check points available - goto chest - open chest 
-Hud - Select treasure days
-
 //Event Handler
 Attack Log
 ----------------
